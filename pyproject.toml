@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "langchain-demo"
+version = "0.1"
+description = "A demo project for Langchain"
+authors = [
+    { name = "Your Name", email = "your.email@example.com" }
+]
+dependencies = [
+    "langchain",
+    "langgraph",
+    "fastapi",
+    "pydantic",
+]
+requires-python = ">=3.8"
+readme = "README.md"
+license = { file = "LICENSE" }
+
+[tool.setuptools]
+packages = { find = { where = ["src"] } }
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[project.scripts]
+# 如果有命令行入口，可以在这里定义
+# example = "module_name:function_name"
+
+[tool.pytest.ini_options]
+# 如果你用 pytest 进行测试，可以在这里设置配置
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+
+[tool.black]
+# 如果你用 black 格式化代码，可以在这里设置配置
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+src_paths = ["."]
+
+[tool.mypy]
+# 如果你用 mypy 进行类型检查，可以在这里设置配置
+python_version = "3.11"
+
+strict = true
+disallow_untyped_calls = true
+ignore_missing_imports = true

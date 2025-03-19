@@ -1,0 +1,9 @@
+.pytest_cache
+__pycache__
+.mypy_cache
+.ruff_cache
+.DS_Store
+.venv
+.coverage
+.vscode
+.idea
