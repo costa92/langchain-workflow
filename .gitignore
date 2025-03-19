@@ -8,3 +8,4 @@ __pycache__
 .vscode
 .idea
 .src/langchain_demo.egg-info
+.htmlcov
