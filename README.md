@@ -87,6 +87,7 @@ pytest
 - 使用 mypy 进行类型检查
 - 保持测试覆盖率
 - 使用 git 进行版本控制
+- [打包](https://packaging.pythonlang.cn/en/latest/guides/distributing-packages-using-setuptools/)
 
 ## 许可证
 
