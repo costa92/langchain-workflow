@@ -255,3 +255,11 @@ workflow.add_edge("assemble_response", END)
 
 # 编译工作流以便执行
 parallelWorkflow = workflow.compile()
+
+# INSERT_YOUR_REWRITE_HERE
+from IPython.display import display
+from PIL import Image as PILImage
+import io
+image_data = parallelWorkflow.get_graph().draw_mermaid_png()
+image = PILImage.open(io.BytesIO(image_data))
+image.save("output.png")

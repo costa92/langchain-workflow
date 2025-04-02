@@ -14,3 +14,5 @@ from langchain_openai import ChatOpenAI
 
 
 model = ChatOpenAI(model="deepseek-chat", temperature=0, base_url="https://api.deepseek.com/v1", api_key=os.getenv("DEEPSEEK_API_KEY")  )
+
+# model = ChatOpenAI(model="llama3:latest", temperature=0, base_url="http://127.0.0.1:11434/v1", api_key="ollama"  )
