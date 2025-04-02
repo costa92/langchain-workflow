@@ -4,31 +4,35 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Literal
 
 from langgraph.graph import StateGraph, MessagesState, START, END
-from graph.state import State
+from graph.state import State,AnalyzeMessageTask
 from tools.tools import get_current_weather, get_current_time
 from langgraph.prebuilt import ToolNode
 from agent.agent import call_model
 from typing import Literal
 from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
 from graph.state import State
+from agent.model import model
+import json
 
+from langchain_core.prompts import PromptTemplate
 tools = [get_current_weather, get_current_time]
 tool_node = ToolNode(tools)
 
 
-# 定义一个分析消息的函数，把信息提出出来，分析多个任务
+
 def analyze_message(state: State) -> State:
     """
     分析用户消息中的多个任务，并结构化提取出这些任务
 
-    参数:
+    Args:
         state: 当前状态，包含消息历史
 
-    返回:
+    Returns:
         更新后的状态，包含结构化的任务信息
     """
     messages = state["messages"]
-    # 获取最后一条消息，应该是用户消息
+
+    # 获取最后一条用户消息
     last_message = next(
         (msg for msg in reversed(messages) if isinstance(msg, HumanMessage)), None
     )
@@ -36,45 +40,69 @@ def analyze_message(state: State) -> State:
     if not last_message:
         return state
 
-    # 提取用户消息内容
-    user_content = last_message.content
+    # 定义任务分析提示模板
+    prompt = PromptTemplate.from_template(
+        """你是一个专业的任务分析专家。请分析用户消息中的所有任务：
 
-    # 简单的任务分割逻辑：按问号、逗号或句号分割
-    task_delimiters = ["?", "？", ",", "，", ".", "。"]
-    tasks = []
+1. 识别并分类每个独立任务:
+   - 区分信息查询和操作类任务
+   - 标注任务优先级和依赖关系
 
-    # 临时存储当前任务文本
-    current_task = ""
+2. 以JSON格式输出:
+    [
+       {{
+         "id": "任务编号",
+         "content": "具体任务内容", 
+         "type": "任务类型",
+         "priority": 1-5,
+         "requires_tool": true/false
+       }}
+     ]
 
-    # 遍历消息内容，按分隔符分割任务
-    for char in user_content:
-        current_task += char
-        if char in task_delimiters and current_task.strip():
-            tasks.append(current_task.strip())
-            current_task = ""
+用户消息：{user_content}"""
+    )
 
-    # 添加最后一个任务（如果有）
-    if current_task.strip():
-        tasks.append(current_task.strip())
+    try:
+        # 调用模型分析任务并解析结果
+        agent = prompt | model
+        result = agent.invoke({"user_content": last_message.content})
+        
+        print(result.content)
+        # 尝试清理和格式化JSON字符串
+        json_str = result.content.strip()
+        # 查找第一个 [ 和最后一个 ] 之间的内容
+        start = json_str.find('[')
+        end = json_str.rfind(']') + 1
+        if start != -1 and end != 0:
+            json_str = json_str[start:end]
+        
+        # 解析JSON并转换为任务对象
+        data = json.loads(json_str)
+        # 使用 from_json 方法将每个字典转换为 User 对象
+        tasks = [AnalyzeMessageTask.from_json(task_data) for task_data in data]
+        # 按优先级排序任务
+        tasks.sort(key=lambda x: x.priority, reverse=True)
+        
+        # 更新状态
+        state.update({"tasks": tasks})
+        
+        return state
 
-    # 任务去重
-    unique_tasks = []
-    for task in tasks:
-        if task not in unique_tasks:
-            unique_tasks.append(task)
-
-    # 将解析后的任务添加到状态中
-    state["tasks"] = unique_tasks
-    state["current_task_index"] = 0
-    state["task_results"] = []
-
-    return state
+    except json.JSONDecodeError as e:
+        print(f"JSON解析错误: {e}")
+        print(f"问题字符串: {result.content}")
+        return state
+    except Exception as e:
+        print(f"任务分析错误: {e}")
+        print(f"完整错误信息: {str(e)}")
+        return state
 
 
 # 处理单个任务
 def process_task(state: State) -> State:
     """处理当前任务并更新状态"""
     tasks = state.get("tasks", [])
+    print("tasks",tasks)
     current_index = state.get("current_task_index", 0)
 
     if not tasks or current_index >= len(tasks):
@@ -88,7 +116,7 @@ def process_task(state: State) -> State:
 
     # 创建一个新的消息列表，只包含当前任务
     # 这样LLM只需要处理一个具体的任务
-    return {"messages": [HumanMessage(content=current_task)]}
+    return {"messages": [HumanMessage(content=current_task.content)]}
 
 
 # 保存任务结果
