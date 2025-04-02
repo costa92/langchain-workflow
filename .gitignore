@@ -7,5 +7,5 @@ __pycache__
 .coverage
 .vscode
 .idea
-.src/langchain_demo.egg-info
+src/langchain_demo.egg-info
 .htmlcov
