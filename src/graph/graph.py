@@ -1,240 +1,190 @@
 #! /usr/bin/env python3
 
-from pydantic import BaseModel
 from typing import List, Dict, Any, Literal
-
+from pydantic import BaseModel
 from langgraph.graph import StateGraph, MessagesState, START, END
-from graph.state import State,AnalyzeMessageTask
-from tools.tools import get_current_weather, get_current_time
 from langgraph.prebuilt import ToolNode
-from agent.agent import call_model
-from typing import Literal
 from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
-from graph.state import State
-from agent.model import model
-import json
-
 from langchain_core.prompts import PromptTemplate
+import json
+import asyncio
+
+from graph.state import State, AnalyzeMessageTask
+from tools.tools import get_current_weather, get_current_time
+from agent.agent import call_model
+from agent.model import model
+
+# 初始化工具节点
 tools = [get_current_weather, get_current_time]
 tool_node = ToolNode(tools)
 
+# 任务分析提示模板
+TASK_ANALYSIS_PROMPT = PromptTemplate.from_template(
+    """你是一个专业的任务分析专家。请仔细分析用户消息中包含的所有任务。
 
+任务分析要求:
+1. 将用户消息拆分为独立的子任务
+2. 每个任务需要包含:
+   - 任务ID: task_1, task_2 等
+   - 具体任务内容
+   - 任务类型: query(查询) 或 action(操作)
+   - 优先级: 1-5 (5最高)
+   - 是否需要工具: true/false
+   - 工具名称: get_current_weather 或 get_current_time
 
-def analyze_message(state: State) -> State:
-    """
-    分析用户消息中的多个任务，并结构化提取出这些任务
+输出格式要求:
+必须是标准JSON数组,每个任务对象包含以下字段:
+[
+  {{
+    "id": "task_1",
+    "content": "查询上海天气", 
+    "type": "query",
+    "priority": 5,
+    "requires_tool": true,
+    "tool_call": "get_current_weather"
+  }}
+]
 
-    Args:
-        state: 当前状态，包含消息历史
+注意:
+- 优先级根据任务紧急程度和依赖关系确定
+- 工具调用必须使用系统支持的工具名称
+- JSON格式必须严格符合规范,不要添加其他内容
 
-    Returns:
-        更新后的状态，包含结构化的任务信息
-    """
+用户消息: {user_content}"""
+)
+
+async def analyze_message(state: State) -> State:
+    """分析用户消息中的多个任务，并结构化提取出这些任务"""
     messages = state["messages"]
-
-    # 获取最后一条用户消息
-    last_message = next(
-        (msg for msg in reversed(messages) if isinstance(msg, HumanMessage)), None
-    )
-
+    last_message = next((msg for msg in reversed(messages) if isinstance(msg, HumanMessage)), None)
+    
     if not last_message:
         return state
 
-    # 定义任务分析提示模板
-    prompt = PromptTemplate.from_template(
-        """你是一个专业的任务分析专家。请分析用户消息中的所有任务：
-
-1. 识别并分类每个独立任务:
-   - 区分信息查询和操作类任务
-   - 标注任务优先级和依赖关系
-
-2. 以JSON格式输出:
-    [
-       {{
-         "id": "任务编号",
-         "content": "具体任务内容", 
-         "type": "任务类型",
-         "priority": 1-5,
-         "requires_tool": true/false
-       }}
-     ]
-
-用户消息：{user_content}"""
-    )
-
     try:
-        # 调用模型分析任务并解析结果
-        agent = prompt | model
-        result = agent.invoke({"user_content": last_message.content})
+        # 调用模型分析任务
+        agent = TASK_ANALYSIS_PROMPT | model
+        result = await agent.ainvoke({"user_content": last_message.content})
         
-        print(result.content)
-        # 尝试清理和格式化JSON字符串
+        # 清理和解析JSON
         json_str = result.content.strip()
-        # 查找第一个 [ 和最后一个 ] 之间的内容
-        start = json_str.find('[')
-        end = json_str.rfind(']') + 1
-        if start != -1 and end != 0:
+        start, end = json_str.find('['), json_str.rfind(']') + 1
+        if start != -1 and end > 0:
             json_str = json_str[start:end]
-        
-        # 解析JSON并转换为任务对象
+            
         data = json.loads(json_str)
-        # 使用 from_json 方法将每个字典转换为 User 对象
         tasks = [AnalyzeMessageTask.from_json(task_data) for task_data in data]
-        # 按优先级排序任务
         tasks.sort(key=lambda x: x.priority, reverse=True)
         
-        # 更新状态
         state.update({"tasks": tasks})
-        
         return state
 
     except json.JSONDecodeError as e:
-        print(f"JSON解析错误: {e}")
-        print(f"问题字符串: {result.content}")
+        print(f"JSON解析错误: {e}\n问题字符串: {result.content}")
         return state
     except Exception as e:
-        print(f"任务分析错误: {e}")
-        print(f"完整错误信息: {str(e)}")
+        print(f"任务分析错误: {e}\n完整错误信息: {str(e)}")
         return state
 
-
-# 处理单个任务
-def process_task(state: State) -> State:
+async def process_task(state: State) -> State:
     """处理当前任务并更新状态"""
     tasks = state.get("tasks", [])
-    print("tasks",tasks)
     current_index = state.get("current_task_index", 0)
 
     if not tasks or current_index >= len(tasks):
         return state
 
-    # 获取当前任务
     current_task = tasks[current_index]
-
-    # 输出当前正在处理的任务（调试用）
     print(f"处理任务 {current_index + 1}/{len(tasks)}: {current_task}")
 
-    # 创建一个新的消息列表，只包含当前任务
-    # 这样LLM只需要处理一个具体的任务
-    return {"messages": [HumanMessage(content=current_task.content)]}
+    if not current_task.requires_tool:
+        return {"messages": [HumanMessage(content=current_task.content)]}
 
+    # 处理工具调用
+    tool_func = {
+        "get_current_weather": get_current_weather,
+        "get_current_time": get_current_time
+    }.get(current_task.tool_call)
 
-# 保存任务结果
-def save_task_result(state: State) -> State:
-    """保存当前任务的处理结果"""
+    if tool_func:
+        try:
+            if current_task.tool_call == "get_current_weather":
+                location = current_task.content.split()[-1]
+                result = await tool_func.ainvoke(input=location)
+            else:
+                result = await tool_func.ainvoke(input={})
+            current_task.result = result
+        except Exception as e:
+            current_task.result = f"工具调用失败: {str(e)}"
+
+    tool_instruction = f"请使用{current_task.tool_call}工具来完成以下任务: {current_task.content}"
+    return {"messages": [HumanMessage(content=tool_instruction)]}
+
+async def save_task_result(state: State) -> State:
+    """保存当前任务的处理结果并更新状态"""
     messages = state["messages"]
     tasks = state.get("tasks", [])
     current_index = state.get("current_task_index", 0)
     task_results = state.get("task_results", [])
 
-    # 确保我们有任务要处理
     if not tasks or current_index >= len(tasks):
         return state
 
-    # 提取处理结果
-    result = ""
+    # 收集结果
+    result_parts = []
+    ai_responses = [msg.content for msg in messages 
+                   if isinstance(msg, AIMessage) and not getattr(msg, "tool_calls", None)]
+    tool_responses = [f"工具【{getattr(msg, 'name', '未知工具')}】执行结果: {msg.content}"
+                     for msg in messages if isinstance(msg, ToolMessage)]
+    
+    result_parts.extend(ai_responses)
+    result_parts.extend(tool_responses)
+    result = "\n\n".join(result_parts).strip() or "没有找到相关回复"
 
-    # 获取非工具调用的AI回复
-    final_ai_messages = []
-    for msg in messages:
-        if isinstance(msg, AIMessage) and not (
-            hasattr(msg, "tool_calls") and msg.tool_calls
-        ):
-            final_ai_messages.append(msg.content)
+    # 更新任务结果
+    current_task = tasks[current_index]
+    if not current_task.result:
+        current_task.result = result
 
-    # 获取工具调用结果
-    tool_results = []
-    for msg in messages:
-        if isinstance(msg, ToolMessage):
-            tool_name = msg.name if hasattr(msg, "name") else "未知工具"
-            tool_results.append(f"工具【{tool_name}】执行结果: {msg.content}")
+    return {
+        **state,
+        "tasks": tasks,
+        "task_results": [*task_results, {"task": current_task, "result": current_task.result}],
+        "current_task_index": current_index + 1,
+        "tool_invocations": 0
+    }
 
-    # 如果有AI消息回复，添加到结果中
-    if final_ai_messages:
-        result += "\n".join(final_ai_messages)
-
-    # 如果有工具调用结果，添加到结果中
-    if tool_results:
-        if result:
-            result += "\n\n"
-        result += "\n".join(tool_results)
-
-    # 如果结果为空，提供默认消息
-    if not result.strip():
-        result = "没有找到相关回复"
-
-    # 保存当前任务和其结果
-    task_results.append({"task": tasks[current_index], "result": result})
-
-    # 重置工具调用计数
-    state["tool_invocations"] = 0
-
-    # 输出完成处理的任务（调试用）
-    print(f"完成任务 {current_index + 1}: {tasks[current_index]}")
-
-    # 更新状态
-    new_state = state.copy()
-    new_state["task_results"] = task_results
-    new_state["current_task_index"] = current_index + 1
-
-    return new_state
-
-
-# 检查是否有更多任务
-def has_more_tasks(state: State) -> Literal["process_next_task", "assemble_response"]:
+async def has_more_tasks(state: State) -> Literal["process_next_task", "assemble_response"]:
     """判断是否有更多任务需要处理"""
     tasks = state.get("tasks", [])
     current_index = state.get("current_task_index", 0)
+    return "process_next_task" if current_index < len(tasks) else "assemble_response"
 
-    if current_index < len(tasks):
-        return "process_next_task"
-    else:
-        return "assemble_response"
-
-
-# 定义一个函数确定是否继续执行
-def should_continue(state: State) -> Literal["tools", END]:
+async def should_continue(state: State) -> Literal["tools", END]:
+    """确定是否继续执行工具调用"""
     messages = state["messages"]
     last_message = messages[-1]
     tool_invocations = state.get("tool_invocations", 0)
 
-    # 最多允许5次工具调用，防止无限循环
     if tool_invocations >= 5:
         return END
 
-    # 检查最后一条消息是否是AI消息且包含工具调用
-    if (
-        isinstance(last_message, AIMessage)
-        and hasattr(last_message, "tool_calls")
-        and last_message.tool_calls
-    ):
-        # 增加工具调用计数
+    if (isinstance(last_message, AIMessage) and 
+        hasattr(last_message, "tool_calls") and 
+        last_message.tool_calls):
         state["tool_invocations"] = tool_invocations + 1
         return "tools"
 
-    # 如果没有工具调用或者已经处理完工具调用，结束执行
     return END
 
-
-# 处理工具调用结果
-def process_tool_results(state: State) -> State:
+async def process_tool_results(state: State) -> State:
     """处理工具调用结果"""
     messages = state["messages"]
-    # 获取最后一条工具消息（如果有）
-    tool_message = next(
-        (msg for msg in reversed(messages) if isinstance(msg, ToolMessage)), None
-    )
-
-    if tool_message:
-        # 返回原始消息列表，但确保工具消息在消息列表中
-        return state
-
-    # 如果没有工具消息，直接返回原始状态
+    tool_message = next((msg for msg in reversed(messages) 
+                        if isinstance(msg, ToolMessage)), None)
     return state
 
-
-# 组装最终响应
-def assemble_response(state: State) -> State:
+async def assemble_response(state: State) -> State:
     """组装所有任务处理结果为最终响应"""
     task_results = state.get("task_results", [])
     original_messages = state.get("original_messages", [])
@@ -242,33 +192,62 @@ def assemble_response(state: State) -> State:
     if not task_results:
         return state
 
-    # 创建综合响应
-    combined_response = "我已经处理了您的多个请求，以下是回复：\n\n"
+    # 提取有效的任务结果
+    all_results = [
+        result['task'].result 
+        for result in task_results
+        if result.get('task') and result['task'].result
+    ]
 
-    for i, result in enumerate(task_results, 1):
-        combined_response += f"问题 {i}: {result['task']}\n"
-        combined_response += f"回答: {result['result']}\n\n"
+    if not all_results:
+        return state
 
-    # 创建一个包含最终综合响应的AIMessage
-    final_message = AIMessage(content=combined_response)
+    try:
+        # 构建提示消息并生成总结
+        prompt = PromptTemplate.from_template(
+            """你是一个专业的助手。请根据以下多个查询结果生成一个完整的回复。
 
-    # 如果有原始消息历史，则保留它并添加最终回复
-    if original_messages:
-        return {"messages": original_messages + [final_message]}
-    else:
-        # 否则只返回最终回复
-        return {"messages": [final_message]}
+要求:
+1. 保持专业、准确的语气
+2. 确保信息的连贯性和完整性
+3. 如果结果中包含多个工具调用,需要合理组织它们之间的关系
+4. 使用清晰的结构,适当分段
+5. 只包含查询结果中的信息,不要添加其他内容
+6. 使用中文回答
 
+查询结果:
+{content}
 
-# 保存原始消息
-def save_original_messages(state: State) -> State:
+请基于以上结果生成一个专业的回复。"""
+        )
+        
+        final_message = await (prompt | model).ainvoke({"content": "\n\n".join(all_results)})
+
+        print(final_message)
+        
+        # 确保返回AIMessage类型
+        final_message = (
+            final_message if isinstance(final_message, AIMessage)
+            else AIMessage(content=str(final_message))
+        )
+        
+    except Exception as e:
+        print(f"生成总结时出现错误: {e}")
+        final_message = AIMessage(content="抱歉,生成总结时出现错误")
+
+    # 更新并返回状态
+    return {
+        **state,
+        "messages": [*original_messages, final_message] if original_messages else [final_message]
+    }
+
+async def save_original_messages(state: State) -> State:
     """保存原始消息历史"""
     new_state = state.copy()
     new_state["original_messages"] = state["messages"]
     return new_state
 
-
-# 创建状态图实例，使用State类型作为状态模式
+# 创建并配置工作流
 workflow = StateGraph(State)
 
 # 添加节点
@@ -297,10 +276,10 @@ workflow.add_conditional_edges(
 )
 workflow.add_edge("assemble_response", END)
 
-# 编译工作流以便执行
+# 编译工作流
 parallelWorkflow = workflow.compile()
 
-# INSERT_YOUR_REWRITE_HERE
+# 生成工作流图
 from IPython.display import display
 from PIL import Image as PILImage
 import io

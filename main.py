@@ -12,7 +12,7 @@ async def main() -> None:
         {
             "messages": [
                 HumanMessage(
-                    content="上海在什么地方? 获取上海市的天气, 现在的时间是几点钟?"
+                    content="上海在什么地方? 获取北京市的天气, 现在的时间是几点钟?"
                 ),
             ]
         },
@@ -20,8 +20,10 @@ async def main() -> None:
     )
 
     # 打印完整的消息内容
-    print("最终响应:")
+    print("最终响应:start","\n\n")
     print(result.get("messages")[-1].content)
+    print("最终响应:end","\n\n")
+
 
 
 if __name__ == "__main__":

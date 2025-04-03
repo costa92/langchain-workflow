@@ -14,7 +14,8 @@ class AnalyzeMessageTask:
     type: str  
     priority: int
     requires_tool: bool
-
+    tool_call: str
+    result: str = ""
     @classmethod
     def from_json(cls, json_data: Dict[str, Any]) -> "AnalyzeMessageTask":
         return cls(**json_data)
@@ -26,3 +27,7 @@ class State(TypedDict):
     messages: Annotated[List, add_messages]
     # 待处理的任务列表
     tasks: List[AnalyzeMessageTask]
+
+    tool_invocations: int
+    current_task_index: int
+    task_results: List[Dict[str, Any]]

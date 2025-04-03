@@ -14,16 +14,16 @@ from langchain_openai import ChatOpenAI
 # )
 
 
-# model = ChatOpenAI(
-#     model="deepseek-chat",
-#     temperature=0,
-#     base_url="https://api.deepseek.com/v1",
-#     api_key=os.getenv("DEEPSEEK_API_KEY"),
-# )
-
 model = ChatOpenAI(
-    model="deepseek-ai/DeepSeek-V3",
+    model="deepseek-chat",
     temperature=0,
-    base_url="https://api.siliconflow.cn/v1",
-    api_key=os.getenv("SILICONFLOW_API_KEY"),
+    base_url="https://api.deepseek.com/v1",
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
 )
+
+# model = ChatOpenAI(
+#     model="deepseek-ai/DeepSeek-V3",
+#     temperature=0,
+#     base_url="https://api.siliconflow.cn/v1",
+#     api_key=os.getenv("SILICONFLOW_API_KEY"),
+# )
