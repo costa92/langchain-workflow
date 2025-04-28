@@ -13,7 +13,7 @@ from graph.state import State, AnalyzeMessageTask
 from tools.tools import get_current_weather, get_current_time
 from agent.agent import call_model
 from agent.model import model
-
+from graph.generate_img import generate_img
 # 初始化工具节点
 tools = [get_current_weather, get_current_time]
 tool_node = ToolNode(tools)
@@ -160,7 +160,7 @@ async def has_more_tasks(state: State) -> Literal["process_next_task", "assemble
     current_index = state.get("current_task_index", 0)
     return "process_next_task" if current_index < len(tasks) else "assemble_response"
 
-async def should_continue(state: State) -> Literal["tools", END]:
+async def should_continue(state: State) -> Literal["tools", END]: # type: ignore
     """确定是否继续执行工具调用"""
     messages = state["messages"]
     last_message = messages[-1]
@@ -279,11 +279,4 @@ workflow.add_edge("assemble_response", END)
 # 编译工作流
 parallelWorkflow = workflow.compile()
 
-# 生成工作流图
-from IPython.display import display
-from PIL import Image as PILImage
-import io
-
-image_data = parallelWorkflow.get_graph().draw_mermaid_png()
-image = PILImage.open(io.BytesIO(image_data))
-image.save("output.png")
+generate_img(parallelWorkflow, "generated_output.png")
