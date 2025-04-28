@@ -247,36 +247,37 @@ async def save_original_messages(state: State) -> State:
     new_state["original_messages"] = state["messages"]
     return new_state
 
-# 创建并配置工作流
-workflow = StateGraph(State)
 
-# 添加节点
-workflow.add_node("analyze_message", analyze_message)
-workflow.add_node("process_task", process_task)
-workflow.add_node("agent", call_model)
-workflow.add_node("tools", tool_node)
-workflow.add_node("process_tool_results", process_tool_results)
-workflow.add_node("save_task_result", save_task_result)
-workflow.add_node("assemble_response", assemble_response)
-workflow.add_node("save_original_messages", save_original_messages)
 
-# 设置图的边和流程
-workflow.add_edge(START, "save_original_messages")
-workflow.add_edge("save_original_messages", "analyze_message")
-workflow.add_edge("analyze_message", "process_task")
-workflow.add_edge("process_task", "agent")
-workflow.add_conditional_edges("agent", should_continue)
-workflow.add_edge("tools", "process_tool_results")
-workflow.add_edge("process_tool_results", "agent")
-workflow.add_edge("agent", "save_task_result")
-workflow.add_conditional_edges(
-    "save_task_result",
-    has_more_tasks,
-    {"process_next_task": "process_task", "assemble_response": "assemble_response"},
-)
-workflow.add_edge("assemble_response", END)
+async def workflow_builder(state: State) -> StateGraph:
+    """构建工作流"""
+    workflow = StateGraph(State)
 
-# 编译工作流
-parallelWorkflow = workflow.compile()
+    # 添加节点
+    workflow.add_node("analyze_message", analyze_message)
+    workflow.add_node("process_task", process_task)
+    workflow.add_node("agent", call_model)
+    workflow.add_node("tools", tool_node)
+    workflow.add_node("process_tool_results", process_tool_results)
+    workflow.add_node("save_task_result", save_task_result)
+    workflow.add_node("assemble_response", assemble_response)
+    workflow.add_node("save_original_messages", save_original_messages)
 
-generate_img(parallelWorkflow, "generated_output.png")
+    # 设置图的边和流程
+    workflow.add_edge(START, "save_original_messages")
+    workflow.add_edge("save_original_messages", "analyze_message")
+    workflow.add_edge("analyze_message", "process_task")
+    workflow.add_edge("process_task", "agent")
+    workflow.add_conditional_edges("agent", should_continue)
+    workflow.add_edge("tools", "process_tool_results")
+    workflow.add_edge("process_tool_results", "agent")
+    workflow.add_edge("agent", "save_task_result")
+    workflow.add_conditional_edges(
+        "save_task_result",
+        has_more_tasks,
+        {"process_next_task": "process_task", "assemble_response": "assemble_response"},
+    )
+    workflow.add_edge("assemble_response", END)
+
+    # 编译工作流
+    return workflow.compile()
