@@ -1,11 +1,11 @@
 #! /usr/bin/env python3
 from agent.model import model
 from tools.tools import get_current_weather, get_current_time
-from graph.state import State
+from graph.state import ChatState
 from langchain_core.messages import AIMessage, HumanMessage
 import logging
 
-async def call_model(state: State) -> State:
+async def call_model(state: ChatState) -> ChatState:
     """调用大语言模型处理任务并返回响应"""
     messages = state.get("messages", [])
     

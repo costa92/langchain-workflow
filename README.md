@@ -38,7 +38,7 @@
 1. 克隆项目
 ```bash
 git clone [repository-url]
-cd python-layout-demo
+cd langgraph-workflow
 ```
 
 2. 创建虚拟环境（推荐）
@@ -49,9 +49,16 @@ source venv/bin/activate  # Linux/Mac
 .\venv\Scripts\activate  # Windows
 ```
 
+使用  conda
+```
+ conda create --name langgraph-workflow python=3.13
+ conda activate langgraph-workflow
+```
+
 3. 安装依赖
 ```bash
 pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 4. 配置环境变量
@@ -65,6 +72,7 @@ cp .env.example .env
 1. 运行主程序
 
 ```bash
+pip install -e .
 python main.py
 ```
 
@@ -104,3 +112,42 @@ pytest
 ## 联系方式
 
 [添加联系方式信息]
+
+## FastAPI 聊天接口
+
+### 启动 API 服务
+
+```bash
+uvicorn src.api:app --reload
+```
+
+### 聊天接口说明
+
+- 路径: `/chat`
+- 方法: `POST`
+- 请求体:
+
+```json
+{
+  "messages": [
+    {"role": "human", "content": "你好，今天天气怎么样？"}
+  ]
+}
+```
+
+- 响应体:
+
+```json
+{
+  "reply": "AI 回复内容",
+  "messages": [
+    {"role": "HumanMessage", "content": "你好，今天天气怎么样？"},
+    {"role": "AIMessage", "content": "今天天气晴朗，气温适中。"}
+  ]
+}
+```
+
+### 说明
+- `messages` 为历史消息列表，最后一条为用户输入。
+- `reply` 为本次 AI 回复内容。
+- 支持多轮对话。

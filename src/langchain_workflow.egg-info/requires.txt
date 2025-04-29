@@ -2,3 +2,7 @@ langchain
 langgraph
 fastapi
 pydantic
+uvicorn
+langchain_openai
+IPython
+Pillow

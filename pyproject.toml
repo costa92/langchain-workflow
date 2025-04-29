@@ -14,6 +14,10 @@ dependencies = [
     "langgraph",
     "fastapi",
     "pydantic",
+    "uvicorn",
+    "langchain_openai",
+    "IPython",
+    "Pillow"
 ]
 requires-python = ">=3.8"
 readme = "README.md"

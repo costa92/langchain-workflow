@@ -7,13 +7,11 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 import json
-import asyncio
 
-from graph.state import State, AnalyzeMessageTask
+from graph.state import ChatState, AnalyzeMessageTask
 from tools.tools import get_current_weather, get_current_time
 from agent.agent import call_model
 from agent.model import model
-from graph.generate_img import generate_img
 # 初始化工具节点
 tools = [get_current_weather, get_current_time]
 tool_node = ToolNode(tools)
@@ -53,15 +51,25 @@ TASK_ANALYSIS_PROMPT = PromptTemplate.from_template(
 用户消息: {user_content}"""
 )
 
-async def analyze_message(state: State) -> State:
+async def analyze_message(state: ChatState) -> ChatState:
     """分析用户消息中的多个任务，并结构化提取出这些任务"""
+    # 如果已经有任务在处理，直接返回
+    current_index = state.get("current_task_index", 0)
+    current_tasks = state.get("tasks", [])
+    
+    if current_tasks and current_index < len(current_tasks):
+        print(f"当前还有任务在处理: 进度 {current_index + 1}/{len(current_tasks)}")
+        return state
+        
     messages = state["messages"]
     last_message = next((msg for msg in reversed(messages) if isinstance(msg, HumanMessage)), None)
     
     if not last_message:
+        print("未找到用户消息")
         return state
 
     try:
+        print(f"开始分析新消息: {last_message.content}")
         # 调用模型分析任务
         agent = TASK_ANALYSIS_PROMPT | model
         result = await agent.ainvoke({"user_content": last_message.content})
@@ -73,11 +81,20 @@ async def analyze_message(state: State) -> State:
             json_str = json_str[start:end]
             
         data = json.loads(json_str)
-        tasks = [AnalyzeMessageTask.from_json(task_data) for task_data in data]
-        tasks.sort(key=lambda x: x.priority, reverse=True)
+        new_tasks = [AnalyzeMessageTask.from_json(task_data) for task_data in data]
+        new_tasks.sort(key=lambda x: x.priority, reverse=True)
         
-        state.update({"tasks": tasks})
-        return state
+        print(f"分析出 {len(new_tasks)} 个任务:")
+        for task in new_tasks:
+            print(f"- {task}")
+        
+        # 重置任务相关状态
+        return {
+            **state,
+            "tasks": new_tasks,  # 使用新任务列表替换旧任务
+            "current_task_index": 0,  # 重置任务索引
+            "task_results": []  # 清空任务结果
+        }
 
     except json.JSONDecodeError as e:
         print(f"JSON解析错误: {e}\n问题字符串: {result.content}")
@@ -86,7 +103,7 @@ async def analyze_message(state: State) -> State:
         print(f"任务分析错误: {e}\n完整错误信息: {str(e)}")
         return state
 
-async def process_task(state: State) -> State:
+async def process_task(state: ChatState) -> ChatState:
     """处理当前任务并更新状态"""
     tasks = state.get("tasks", [])
     current_index = state.get("current_task_index", 0)
@@ -120,7 +137,7 @@ async def process_task(state: State) -> State:
     tool_instruction = f"请使用{current_task.tool_call}工具来完成以下任务: {current_task.content}"
     return {"messages": [HumanMessage(content=tool_instruction)]}
 
-async def save_task_result(state: State) -> State:
+async def save_task_result(state: ChatState) -> ChatState:
     """保存当前任务的处理结果并更新状态"""
     messages = state["messages"]
     tasks = state.get("tasks", [])
@@ -154,13 +171,13 @@ async def save_task_result(state: State) -> State:
         "tool_invocations": 0
     }
 
-async def has_more_tasks(state: State) -> Literal["process_next_task", "assemble_response"]:
+async def has_more_tasks(state: ChatState) -> Literal["process_next_task", "assemble_response"]:
     """判断是否有更多任务需要处理"""
     tasks = state.get("tasks", [])
     current_index = state.get("current_task_index", 0)
     return "process_next_task" if current_index < len(tasks) else "assemble_response"
 
-async def should_continue(state: State) -> Literal["tools", END]: # type: ignore
+async def should_continue(state: ChatState) -> Literal["tools", END]: 
     """确定是否继续执行工具调用"""
     messages = state["messages"]
     last_message = messages[-1]
@@ -177,14 +194,14 @@ async def should_continue(state: State) -> Literal["tools", END]: # type: ignore
 
     return END
 
-async def process_tool_results(state: State) -> State:
+async def process_tool_results(state: ChatState) -> ChatState:
     """处理工具调用结果"""
     messages = state["messages"]
     tool_message = next((msg for msg in reversed(messages) 
                         if isinstance(msg, ToolMessage)), None)
     return state
 
-async def assemble_response(state: State) -> State:
+async def assemble_response(state: ChatState) -> ChatState:
     """组装所有任务处理结果为最终响应"""
     task_results = state.get("task_results", [])
     original_messages = state.get("original_messages", [])
@@ -241,7 +258,7 @@ async def assemble_response(state: State) -> State:
         "messages": [*original_messages, final_message] if original_messages else [final_message]
     }
 
-async def save_original_messages(state: State) -> State:
+async def save_original_messages(state: ChatState) -> ChatState:
     """保存原始消息历史"""
     new_state = state.copy()
     new_state["original_messages"] = state["messages"]
@@ -249,9 +266,9 @@ async def save_original_messages(state: State) -> State:
 
 
 
-async def workflow_builder(state: State) -> StateGraph:
+async def workflow_builder() -> StateGraph:
     """构建工作流"""
-    workflow = StateGraph(state)
+    workflow = StateGraph(ChatState)
 
     # 添加节点
     workflow.add_node("analyze_message", analyze_message)
