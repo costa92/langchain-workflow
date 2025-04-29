@@ -5,6 +5,7 @@ src/agent/__init__.py
 src/agent/agent.py
 src/agent/model.py
 src/graph/__init__.py
+src/graph/generate_img.py
 src/graph/graph.py
 src/graph/state.py
 src/langchain_workflow.egg-info/PKG-INFO

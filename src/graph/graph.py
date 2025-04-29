@@ -251,7 +251,7 @@ async def save_original_messages(state: State) -> State:
 
 async def workflow_builder(state: State) -> StateGraph:
     """构建工作流"""
-    workflow = StateGraph(State)
+    workflow = StateGraph(state)
 
     # 添加节点
     workflow.add_node("analyze_message", analyze_message)
