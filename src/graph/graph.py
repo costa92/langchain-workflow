@@ -56,6 +56,7 @@ async def analyze_message(state: ChatState) -> ChatState:
     # 如果已经有任务在处理，直接返回
     current_index = state.get("current_task_index", 0)
     current_tasks = state.get("tasks", [])
+    processed_tasks = state.get("processed_tasks", set())
     
     if current_tasks and current_index < len(current_tasks):
         print(f"当前还有任务在处理: 进度 {current_index + 1}/{len(current_tasks)}")
@@ -82,18 +83,25 @@ async def analyze_message(state: ChatState) -> ChatState:
             
         data = json.loads(json_str)
         new_tasks = [AnalyzeMessageTask.from_json(task_data) for task_data in data]
-        new_tasks.sort(key=lambda x: x.priority, reverse=True)
         
-        print(f"分析出 {len(new_tasks)} 个任务:")
+        # 过滤掉已处理的任务
+        new_tasks = [task for task in new_tasks if task.id not in processed_tasks]
+        
+        if not new_tasks:
+            print("没有新的待处理任务")
+            return state
+            
+        print(f"分析出 {len(new_tasks)} 个新任务:")
         for task in new_tasks:
             print(f"- {task}")
         
         # 重置任务相关状态
         return {
             **state,
-            "tasks": new_tasks,  # 使用新任务列表替换旧任务
-            "current_task_index": 0,  # 重置任务索引
-            "task_results": []  # 清空任务结果
+            "tasks": new_tasks,
+            "current_task_index": 0,
+            "task_results": {},  # 使用字典存储结果
+            "processed_tasks": processed_tasks  # 保持已处理任务的记录
         }
 
     except json.JSONDecodeError as e:
@@ -107,15 +115,21 @@ async def process_task(state: ChatState) -> ChatState:
     """处理当前任务并更新状态"""
     tasks = state.get("tasks", [])
     current_index = state.get("current_task_index", 0)
+    processed_tasks = state.get("processed_tasks", set())
 
     if not tasks or current_index >= len(tasks):
         return state
 
     current_task = tasks[current_index]
+    
+    # 如果任务已处理，跳过
+    if current_task.id in processed_tasks:
+        return {
+            **state,
+            "current_task_index": current_index + 1
+        }
+    
     print(f"处理任务 {current_index + 1}/{len(tasks)}: {current_task}")
-
-    if not current_task.requires_tool:
-        return {"messages": [HumanMessage(content=current_task.content)]}
 
     # 处理工具调用
     tool_func = {
@@ -123,7 +137,7 @@ async def process_task(state: ChatState) -> ChatState:
         "get_current_time": get_current_time
     }.get(current_task.tool_call)
 
-    if tool_func:
+    if current_task.requires_tool and tool_func:
         try:
             if current_task.tool_call == "get_current_weather":
                 location = current_task.content.split()[-1]
@@ -134,25 +148,35 @@ async def process_task(state: ChatState) -> ChatState:
         except Exception as e:
             current_task.result = f"工具调用失败: {str(e)}"
 
-    tool_instruction = f"请使用{current_task.tool_call}工具来完成以下任务: {current_task.content}"
-    return {"messages": [HumanMessage(content=tool_instruction)]}
+        tool_instruction = f"请使用{current_task.tool_call}工具来完成以下任务: {current_task.content}"
+        return {
+            **state,
+            "messages": [*state.get("messages", []), HumanMessage(content=tool_instruction)]
+        }
+    else:
+        return {
+            **state,
+            "messages": [*state.get("messages", []), HumanMessage(content=current_task.content)]
+        }
 
 async def save_task_result(state: ChatState) -> ChatState:
     """保存当前任务的处理结果并更新状态"""
-    messages = state["messages"]
+    messages = state.get("messages", [])
     tasks = state.get("tasks", [])
     current_index = state.get("current_task_index", 0)
-    task_results = state.get("task_results", [])
+    task_results = state.get("task_results", {})
+    processed_tasks = state.get("processed_tasks", set())
+    tool_invocations = state.get("tool_invocations", 0)
 
     if not tasks or current_index >= len(tasks):
         return state
 
     # 收集结果
     result_parts = []
-    ai_responses = [msg.content for msg in messages 
+    ai_responses = [msg.content for msg in messages[-3:] 
                    if isinstance(msg, AIMessage) and not getattr(msg, "tool_calls", None)]
     tool_responses = [f"工具【{getattr(msg, 'name', '未知工具')}】执行结果: {msg.content}"
-                     for msg in messages if isinstance(msg, ToolMessage)]
+                     for msg in messages[-3:] if isinstance(msg, ToolMessage)]
     
     result_parts.extend(ai_responses)
     result_parts.extend(tool_responses)
@@ -162,13 +186,24 @@ async def save_task_result(state: ChatState) -> ChatState:
     current_task = tasks[current_index]
     if not current_task.result:
         current_task.result = result
+    
+    # 更新处理状态
+    current_task.processed = True
+    processed_tasks.add(current_task.id)
+    task_results[current_task.id] = {
+        "task": current_task,
+        "result": current_task.result
+    }
 
+    # 保持原始消息不变
     return {
         **state,
         "tasks": tasks,
-        "task_results": [*task_results, {"task": current_task, "result": current_task.result}],
+        "task_results": task_results,
         "current_task_index": current_index + 1,
-        "tool_invocations": 0
+        "tool_invocations": tool_invocations,
+        "processed_tasks": processed_tasks,
+        "original_messages": state.get("original_messages", [])
     }
 
 async def has_more_tasks(state: ChatState) -> Literal["process_next_task", "assemble_response"]:
@@ -179,32 +214,37 @@ async def has_more_tasks(state: ChatState) -> Literal["process_next_task", "asse
 
 async def should_continue(state: ChatState) -> Literal["tools", END]: 
     """确定是否继续执行工具调用"""
-    messages = state["messages"]
-    last_message = messages[-1]
+    messages = state.get("messages", [])
+    last_message = messages[-1] if messages else None
     tool_invocations = state.get("tool_invocations", 0)
 
     if tool_invocations >= 5:
+        print("已达到最大工具调用次数限制")
         return END
 
     if (isinstance(last_message, AIMessage) and 
         hasattr(last_message, "tool_calls") and 
         last_message.tool_calls):
-        state["tool_invocations"] = tool_invocations + 1
         return "tools"
 
     return END
 
 async def process_tool_results(state: ChatState) -> ChatState:
     """处理工具调用结果"""
-    messages = state["messages"]
-    tool_message = next((msg for msg in reversed(messages) 
-                        if isinstance(msg, ToolMessage)), None)
-    return state
+    messages = state.get("messages", [])
+    tool_invocations = state.get("tool_invocations", 0)
+    
+    # 更新工具调用计数
+    return {
+        **state,
+        "tool_invocations": tool_invocations + 1
+    }
 
 async def assemble_response(state: ChatState) -> ChatState:
     """组装所有任务处理结果为最终响应"""
-    task_results = state.get("task_results", [])
+    task_results = state.get("task_results", {})
     original_messages = state.get("original_messages", [])
+    messages = state.get("messages", [])
 
     if not task_results:
         return state
@@ -212,8 +252,8 @@ async def assemble_response(state: ChatState) -> ChatState:
     # 提取有效的任务结果
     all_results = [
         result['task'].result 
-        for result in task_results
-        if result.get('task') and result['task'].result
+        for result in task_results.values()
+        if result['task'] and result['task'].result
     ]
 
     if not all_results:
@@ -239,8 +279,6 @@ async def assemble_response(state: ChatState) -> ChatState:
         )
         
         final_message = await (prompt | model).ainvoke({"content": "\n\n".join(all_results)})
-
-        print(final_message)
         
         # 确保返回AIMessage类型
         final_message = (
@@ -248,15 +286,23 @@ async def assemble_response(state: ChatState) -> ChatState:
             else AIMessage(content=str(final_message))
         )
         
+        # 更新并返回状态，保持原始消息和工具调用状态
+        return {
+            **state,
+            "messages": [*original_messages, final_message] if original_messages else [final_message],
+            "original_messages": original_messages,
+            "tool_invocations": state.get("tool_invocations", 0)
+        }
+        
     except Exception as e:
         print(f"生成总结时出现错误: {e}")
-        final_message = AIMessage(content="抱歉,生成总结时出现错误")
-
-    # 更新并返回状态
-    return {
-        **state,
-        "messages": [*original_messages, final_message] if original_messages else [final_message]
-    }
+        error_message = AIMessage(content="抱歉,生成总结时出现错误")
+        return {
+            **state,
+            "messages": [*original_messages, error_message] if original_messages else [error_message],
+            "original_messages": original_messages,
+            "tool_invocations": state.get("tool_invocations", 0)
+        }
 
 async def save_original_messages(state: ChatState) -> ChatState:
     """保存原始消息历史"""
