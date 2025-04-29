@@ -151,42 +151,10 @@ class TaskAnalyzerAgent:
                         "tool_name": tool_name,
                         "tool_input": last_message.content
                     }
-            
-            # 不需要工具调用,使用常规对话
-            system_message = {
-                "role": "system", 
-                "content": """你是一个智能助手,专注于提供准确和有帮助的回答。
-                
-                角色定位:
-                - 专业的问题解答助手
-                - 保持客观专业的语气
-                - 确保回答准确可靠
-                
-                回答原则:
-                1. 工具调用
-                - 需要实时数据时必须使用对应工具
-                - 天气查询使用 get_current_weather
-                - 时间查询使用 get_current_time
-                - 不生成虚假数据
-                - 工具调用失败需告知用户
-                
-                2. 结果处理
-                - 直接使用工具返回结果
-                - 保持回答流畅自然
-                - 缺少信息时明确告知
-                
-                3. 回答质量
-                - 准确性: 基于工具返回结果
-                - 相关性: 围绕用户查询
-                - 完整性: 包含必要信息
-                - 简洁性: 避免冗余"""
-            }
-            
-            processed_messages = [system_message] + messages
-            response = await self.llm_with_tools.ainvoke(processed_messages)
-            
-            return {"messages": messages + [response]}
-            
+                else:
+                    return {"tool_name": None, "tool_input": last_message.content}  
+            else:
+                return {"tool_name": None, "tool_input": last_message.content}
         except Exception as e:
             logging.error(f"代理决策过程出错: {e}", exc_info=True)
             return {}
@@ -315,9 +283,20 @@ class TaskAnalyzerAgent:
                 "messages": [*state.get("messages", []), HumanMessage(content=tool_instruction)]
             }
         else:
+            # 如果不需要工具调用,直接返回结果
+            current_task.result = current_task.content
             return {
                 **state,
-                "messages": [*state.get("messages", []), HumanMessage(content=current_task.content)]
+                "current_task_index": current_index + 1,
+                "task_results": {
+                    **state.get("task_results", {}),
+                    current_task.id: {
+                        "task": current_task,
+                        "result": current_task.result,
+                        "is_tool_result": False
+                    }
+                },
+                "processed_tasks": processed_tasks | {current_task.id}
             }
 
     async def save_task_result(self, state: TaskAnalyzerState) -> TaskAnalyzerState:

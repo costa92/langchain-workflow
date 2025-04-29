@@ -62,3 +62,44 @@ async def test_process_task():
         
     except ImportError as e:
         pytest.skip(f"跳过测试: {str(e)}")
+
+# agent_decision
+@pytest.mark.asyncio 
+async def test_agent_decision():
+    """测试agent_decision方法"""
+    try:
+        # 初始化代理
+        agent = TaskAnalyzerAgent()
+
+        
+        # 测试天气查询工具调用
+        state = {
+            "messages": [HumanMessage(content="北京今天天气怎么样?")]
+        }
+        result = await agent.agent_decision(state)
+        print(result)
+        assert "tool_name" in result, "天气查询应触发工具调用"
+        assert result["tool_name"] == "get_current_weather", "应使用天气查询工具"
+        
+
+                
+        # 测试常规对话
+        state = {
+            "messages": [HumanMessage(content="你好,请问你是谁?")]
+        }
+        result = await agent.agent_decision(state)
+        print(result)
+        assert "messages" in result, "返回结果中应包含messages字段"
+        assert len(result["messages"]) > 1, "应该包含回复消息"
+
+        # 测试时间查询工具调用
+        state = {
+            "messages": [HumanMessage(content="现在几点了?")]
+        }
+        result = await agent.agent_decision(state)
+        assert "tool_name" in result, "时间查询应触发工具调用"
+        assert result["tool_name"] == "get_current_time", "应使用时间查询工具"
+        
+        print(result)
+    except Exception as e:
+        pytest.fail(f"测试失败: {str(e)}")
