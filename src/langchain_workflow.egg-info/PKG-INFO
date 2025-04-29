@@ -12,8 +12,18 @@ Requires-Dist: fastapi
 Requires-Dist: pydantic
 Requires-Dist: uvicorn
 Requires-Dist: langchain_openai
+Requires-Dist: langchain_anthropic
+Requires-Dist: langchain_deepseek
 Requires-Dist: IPython
 Requires-Dist: Pillow
+Requires-Dist: python-dotenv
+Requires-Dist: pytest
+Requires-Dist: pytest-env
+Requires-Dist: anyio
+Requires-Dist: pytest-asyncio
+Requires-Dist: pytest-tornasync
+Requires-Dist: pytest-trio
+Requires-Dist: pytest-twisted
 Dynamic: license-file
 
 # python-layout-demo
@@ -54,6 +64,7 @@ Dynamic: license-file
 ## 安装说明
 
 1. 克隆项目
+
 ```bash
 git clone [repository-url]
 cd langgraph-workflow

@@ -9,6 +9,13 @@ from graph.state import ChatState
 
 app = FastAPI(title="Langchain Workflow Chat API")
 
+
+@app.get("/health")
+async def health():
+    """检查接口接口"""
+    return "OK"
+
+
 # 使用langchain_core的消息类型，而不是自定义Message类
 class ChatRequest(BaseModel):
     messages: List[Dict[str, str]] = Field(..., description="消息历史，最后一条为用户输入")
@@ -48,3 +55,4 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         logging.error(f"API 调用出错: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="模型推理失败")
+

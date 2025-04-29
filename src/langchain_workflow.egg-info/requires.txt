@@ -4,5 +4,15 @@ fastapi
 pydantic
 uvicorn
 langchain_openai
+langchain_anthropic
+langchain_deepseek
 IPython
 Pillow
+python-dotenv
+pytest
+pytest-env
+anyio
+pytest-asyncio
+pytest-tornasync
+pytest-trio
+pytest-twisted

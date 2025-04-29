@@ -1,30 +1,41 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
+requires = ["setuptools>=64", "wheel"]
 
 [project]
-name = "langchain-workflow"
-version = "0.1.0"
-description = "A demo project for Langchain"
 authors = [
-    { name = "Your Name", email = "your.email@example.com" }
+  {name = "Your Name", email = "your.email@example.com"},
 ]
 dependencies = [
-    "langchain",
-    "langgraph",
-    "fastapi",
-    "pydantic",
-    "uvicorn",
-    "langchain_openai",
-    "IPython",
-    "Pillow"
+  "langchain",
+  "langgraph", 
+  "fastapi",
+  "pydantic",
+  "uvicorn",
+  "langchain_openai",
+  "langchain_anthropic",
+  "langchain_deepseek",
+  "IPython",
+  "Pillow",
+  "python-dotenv",  # 修改为 python-dotenv 以支持环境变量加载
+  "pytest",  # 添加测试依赖
+  "pytest-env",  # 添加测试环境变量支持
+  "anyio",
+  "pytest-asyncio",  # 支持异步测试
+  "pytest-tornasync",  # 支持Tornado异步测试
+  "pytest-trio",  # 支持Trio异步测试
+  "pytest-twisted",  # 支持Twisted异步测试
+  "twisted" # 
 ]
-requires-python = ">=3.8"
+description = "A demo project for Langchain"
+license = {file = "LICENSE"}
+name = "langchain-workflow"
 readme = "README.md"
-license = { file = "LICENSE" }
+requires-python = ">=3.8"
+version = "0.1.0"
 
 [tool.setuptools]
-packages = { find = { where = ["src"] } }
+packages = {find = {where = ["src"]}}
 
 [tool.setuptools.package-dir]
 "" = "src"
@@ -34,13 +45,18 @@ packages = { find = { where = ["src"] } }
 # example = "module_name:function_name"
 
 [tool.pytest.ini_options]
-# 如果你用 pytest 进行测试，可以在这里设置配置
-minversion = "6.0"
+# pytest 配置
+pythonpath = ["src"]
+filterwarnings = [
+    "ignore::DeprecationWarning"
+]
 addopts = "-ra -q"
+minversion = "6.0"
 testpaths = ["tests"]
 
+
 [tool.black]
-# 如果你用 black 格式化代码，可以在这里设置配置
+# black 代码格式化配置
 line-length = 88
 target-version = ['py38']
 
@@ -49,9 +65,8 @@ profile = "black"
 src_paths = ["."]
 
 [tool.mypy]
-# 如果你用 mypy 进行类型检查，可以在这里设置配置
+# mypy 类型检查配置
 python_version = "3.11"
-
-strict = true
 disallow_untyped_calls = true
 ignore_missing_imports = true
+strict = true
