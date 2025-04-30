@@ -11,11 +11,12 @@ from langgraph.prebuilt import ToolNode
 import json
 from typing_extensions import TypedDict
 from dataclasses import dataclass
+from langchain.prompts import PromptTemplate
 
 # 导入提示词模板
 from prompts.task_analysis import TASK_ANALYSIS_PROMPT
 from prompts.tool_analysis import TOOL_ANALYSIS_PROMPT
-from prompts.response_generation import TOOL_SUMMARY_PROMPT, MODEL_SUMMARY_PROMPT
+from prompts.response_generation import TOOL_SUMMARY_PROMPT, MODEL_SUMMARY_PROMPT, FUSION_SUMMARY_PROMPT
 
 
 @dataclass
@@ -336,13 +337,18 @@ class TaskAnalyzerAgent:
         try:
             final_responses = []
             
-            if tool_results:
+            if tool_results and model_results:
+                fusion_summary = await (FUSION_SUMMARY_PROMPT | self.llm).ainvoke({
+                    "tool_content": "\n\n".join(tool_results),
+                    "model_content": "\n\n".join(model_results)
+                })
+                final_responses.append(fusion_summary.content)
+            elif tool_results:
                 tool_summary = await (TOOL_SUMMARY_PROMPT | self.llm).ainvoke({
                     "content": "\n\n".join(tool_results)
                 })
                 final_responses.append(tool_summary.content)
-            
-            if model_results:
+            elif model_results:
                 model_summary = await (MODEL_SUMMARY_PROMPT | self.llm).ainvoke({
                     "content": "\n\n".join(model_results)
                 })
