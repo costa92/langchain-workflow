@@ -1,7 +1,8 @@
 import pytest
 from agent.task_agent import TaskAnalyzerAgent, AnalyzeMessageTask, TaskAnalyzerState
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from llm.llm import init_deepseek
+from unittest.mock import AsyncMock, MagicMock
 
 @pytest.mark.asyncio
 async def test_process_task():
@@ -207,6 +208,101 @@ async def test_analyze_message():
             print(task)
     except Exception as e:
         pytest.fail(f"测试失败: {str(e)}")
+        
+
+@pytest.mark.asyncio
+async def test_init_sets_tools_and_llm():
+    agent = TaskAnalyzerAgent()
+    assert hasattr(agent, "llm")
+    assert "get_current_weather" in agent.tool_map
+    assert "get_current_time" in agent.tool_map
+
+@pytest.mark.asyncio
+async def test_save_original_messages_first_time():
+    agent = TaskAnalyzerAgent()
+    state = {"messages": [HumanMessage(content="hi")], "original_messages": []}
+    result = await agent.save_original_messages(state)
+    assert "original_messages" in result
+    assert result["original_messages"] == [HumanMessage(content="hi")]
+
+@pytest.mark.asyncio
+async def test_save_original_messages_not_first_time():
+    agent = TaskAnalyzerAgent()
+    msg = HumanMessage(content="hi")
+    state = {"messages": [msg], "original_messages": [msg]}
+    result = await agent.save_original_messages(state)
+    assert result == {}
+
+@pytest.mark.asyncio
+async def test_analyze_message_no_human_message():
+    agent = TaskAnalyzerAgent()
+    state = {"messages": [], "original_messages": [], "tasks": [], "current_task_index": 0}
+    result = await agent.analyze_message(state)
+    assert result["tasks"] == []
+    assert result["current_task_index"] == 0
+
+@pytest.mark.asyncio
+async def test_analyze_message_invalid_json(monkeypatch):
+    agent = TaskAnalyzerAgent()
+    msg = HumanMessage(content="test")
+    state = {"messages": [msg], "original_messages": [msg], "tasks": [], "current_task_index": 0}
+    # Mock LLM to return invalid JSON
+    class FakeResult:
+        content = "not a json"
+    agent.llm = MagicMock()
+    agent.llm.ainvoke = AsyncMock(return_value=FakeResult())
+    result = await agent.analyze_message(state)
+    assert any("Sorry" in m.content for m in result["messages"] if isinstance(m, AIMessage))
+
+@pytest.mark.asyncio
+async def test_process_task_no_tasks():
+    agent = TaskAnalyzerAgent()
+    state = {"tasks": [], "current_task_index": 0, "processed_tasks": set(), "task_results": {}}
+    result = await agent.process_task(state)
+    assert result == {}
+
+@pytest.mark.asyncio
+async def test_process_task_already_processed():
+    agent = TaskAnalyzerAgent()
+    task = AnalyzeMessageTask(id="1", content="test", requires_tool=False)
+    state = {
+        "tasks": [task],
+        "current_task_index": 0,
+        "processed_tasks": {"1"},
+        "task_results": {}
+    }
+    result = await agent.process_task(state)
+    assert result["current_task_index"] == 1
+
+@pytest.mark.asyncio
+async def test_has_more_tasks_true():
+    agent = TaskAnalyzerAgent()
+    state = {"tasks": [1, 2], "current_task_index": 0}
+    result = await agent.has_more_tasks(state)
+    assert result == "process_task"
+
+@pytest.mark.asyncio
+async def test_has_more_tasks_false():
+    agent = TaskAnalyzerAgent()
+    state = {"tasks": [1], "current_task_index": 1}
+    result = await agent.has_more_tasks(state)
+    assert result == "assemble_response"
+
+@pytest.mark.asyncio
+async def test_assemble_response_no_results():
+    agent = TaskAnalyzerAgent()
+    state = {"task_results": {}, "original_messages": []}
+    result = await agent.assemble_response(state)
+    assert isinstance(result["messages"][-1], AIMessage)
+
+@pytest.mark.asyncio
+async def test_run_handles_exception(monkeypatch):
+    agent = TaskAnalyzerAgent()
+    agent.graph = MagicMock()
+    agent.graph.ainvoke = AsyncMock(side_effect=Exception("fail"))
+    result = await agent.run("test")
+    assert "error" in result
+    assert isinstance(result["messages"][-1], AIMessage)
         
 
 
