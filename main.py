@@ -4,15 +4,16 @@ import asyncio
 from graph.generate_img import generate_img
 from langchain_core.messages import HumanMessage, AIMessage
 from agent.task_agent import TaskAnalyzerAgent
+import logging
 
 async def main() -> None:
     """主函数：初始化工作流并执行测试查询"""
     # 构建并可视化工作流
 
     taskAnalyzerAgent = TaskAnalyzerAgent()
-    generate_img(taskAnalyzerAgent.build_graph(), "generated_output_task.png")
+    # generate_img(taskAnalyzerAgent.build_graph(), "generated_output_task.png")
     
-    content="上海在什么地方? 获取北京市的天气, 现在的时间是几点钟?"
+    content="现在几点钟?我想从北京到上海，推荐合适的线路，并且推荐合适的酒店"
     result = await taskAnalyzerAgent.run(content=content)
     
     # 获取最终回答
@@ -36,4 +37,8 @@ async def main() -> None:
         print("未获取到回答")
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format='[%(asctime)s] %(levelname)s %(name)s: %(message)s'
+    )
     asyncio.run(main())

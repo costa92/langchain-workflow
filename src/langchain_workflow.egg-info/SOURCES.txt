@@ -12,7 +12,9 @@ src/langchain_workflow.egg-info/requires.txt
 src/langchain_workflow.egg-info/top_level.txt
 src/llm/__init__.py
 src/llm/llm.py
+src/prompts/response_generation.py
 src/prompts/task_analysis.py
+src/prompts/tool_analysis.py
 src/tools/tools.py
 tests/test_llm.py
 tests/test_sample.py
