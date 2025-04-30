@@ -8,10 +8,14 @@ from langgraph.graph import StateGraph, END
 from llm.llm import init_deepseek
 from tools.tools import get_current_weather, get_current_time
 from langgraph.prebuilt import ToolNode
-from langchain_core.prompts import PromptTemplate
 import json
 from typing_extensions import TypedDict
 from dataclasses import dataclass
+
+# 导入提示词模板
+from prompts.task_analysis import TASK_ANALYSIS_PROMPT
+from prompts.tool_analysis import TOOL_ANALYSIS_PROMPT
+from prompts.response_generation import TOOL_SUMMARY_PROMPT, MODEL_SUMMARY_PROMPT
 
 
 @dataclass
@@ -113,18 +117,7 @@ class TaskAnalyzerAgent:
                     "result": None
                 }
             
-            tool_analysis_prompt = PromptTemplate.from_template(
-                """分析用户输入是否需要使用工具:
-                - 天气查询使用 get_current_weather
-                - 时间查询使用 get_current_time
-                
-                用户输入: {input}
-                
-                只返回工具名称,如果不需要工具返回 "none"
-                """
-            )
-            
-            tool_result = await (tool_analysis_prompt | self.llm).ainvoke({
+            tool_result = await (TOOL_ANALYSIS_PROMPT | self.llm).ainvoke({
                 "input": last_message.content
             })
             tool_name = tool_result.content.strip().lower()
@@ -152,10 +145,7 @@ class TaskAnalyzerAgent:
         current_index = state.get("current_task_index", 0)
         current_tasks = state.get("tasks", [])
         processed_tasks = state.get("processed_tasks", set())
-        
-        print(f"current_tasks: {current_tasks}")
-        print(f"current_index: {current_index}")
-        print(f"processed_tasks: {processed_tasks}")
+
         if current_tasks and current_index < len(current_tasks):
             logging.info(f"当前还有任务在处理: 进度 {current_index + 1}/{len(current_tasks)}")
             return state
@@ -169,29 +159,9 @@ class TaskAnalyzerAgent:
 
         try:
             logging.info(f"开始分析新消息: {last_message.content}")
-            task_analysis_prompt = PromptTemplate.from_template(
-                """请分析用户的输入，识别出其中包含的所有独立任务。
-                
-                用户输入: {user_content}
-                
-                请以JSON数组格式返回任务列表，每个任务包含以下字段:
-                - id: 任务唯一标识符
-                - content: 任务内容描述
-                - requires_tool: 是否需要使用工具 (true/false)
-                - tool_call: 如需使用工具，指定工具名称 (get_current_weather 或 get_current_time)
-
-                示例输出:
-                [
-                  {{
-                    "id": "task_1",
-                    "content": "查询北京的天气",
-                    "requires_tool": true,
-                    "tool_call": "get_current_weather"
-                  }}
-                ]"""
-            )
-            
-            result = await (task_analysis_prompt | self.llm).ainvoke({"user_content": last_message.content})
+            result = await (TASK_ANALYSIS_PROMPT | self.llm).ainvoke({
+                "user_content": last_message.content
+            })
             
             json_str = result.content.strip()
             start, end = json_str.find('['), json_str.rfind(']') + 1
@@ -367,23 +337,15 @@ class TaskAnalyzerAgent:
             final_responses = []
             
             if tool_results:
-                tool_prompt = PromptTemplate.from_template(
-                    """请总结以下工具调用结果:
-                    {content}
-                    
-                    请生成简洁清晰的总结。"""
-                )
-                tool_summary = await (tool_prompt | self.llm).ainvoke({"content": "\n\n".join(tool_results)})
+                tool_summary = await (TOOL_SUMMARY_PROMPT | self.llm).ainvoke({
+                    "content": "\n\n".join(tool_results)
+                })
                 final_responses.append(tool_summary.content)
             
             if model_results:
-                model_prompt = PromptTemplate.from_template(
-                    """请总结以下对话内容:
-                    {content}
-                    
-                    请生成连贯的总结。"""
-                )
-                model_summary = await (model_prompt | self.llm).ainvoke({"content": "\n\n".join(model_results)})
+                model_summary = await (MODEL_SUMMARY_PROMPT | self.llm).ainvoke({
+                    "content": "\n\n".join(model_results)
+                })
                 final_responses.append(model_summary.content)
             
             final_message = AIMessage(content="\n\n".join(final_responses))
