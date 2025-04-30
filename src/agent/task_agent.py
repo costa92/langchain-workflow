@@ -28,7 +28,7 @@ class AnalyzeMessageTask:
     def from_json(cls, json_data: Dict[str, Any]) -> "AnalyzeMessageTask":
         return cls(**json_data)
 
-def merge_tasks(old, new):
+def merge_tasks(old: List[AnalyzeMessageTask], new: List[AnalyzeMessageTask]) -> List[AnalyzeMessageTask]:
     if old is None:
         return new or []
     if new is None:
@@ -36,35 +36,35 @@ def merge_tasks(old, new):
     old_ids = {t.id for t in old}
     return old + [t for t in new if t.id not in old_ids]
 
-def merge_task_index(old, new):
+def merge_task_index(old: int, new: int) -> int:
     if old is None:
         return new or 0
     if new is None:
         return old
     return new
 
-def merge_task_results(old, new):
+def merge_task_results(old: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
     if old is None:
         return new or {}
     if new is None:
         return old
     return {**old, **new}
 
-def merge_processed_tasks(old, new):
+def merge_processed_tasks(old: set, new: set) -> set:
     if old is None:
         return new or set()
     if new is None:
         return old
     return old | new
 
-def merge_tool_invocations(old, new):
+def merge_tool_invocations(old: int, new: int) -> int:
     if old is None:
         return new or 0
     if new is None:
         return old
     return new
 
-def merge_original_messages(old, new):
+def merge_original_messages(old: List[AnyMessage], new: List[AnyMessage]) -> List[AnyMessage]:
     if old is None:
         return new or []
     if new is None:
@@ -75,97 +75,87 @@ class TaskAnalyzerState(TypedDict):
     """任务分析器状态类型定义"""
     messages: Annotated[List[AnyMessage], add_messages]
     chat_analyzer_messages: Annotated[List[AnyMessage], add_messages]
-    tasks: Annotated[List[AnalyzeMessageTask], merge_tasks]
-    current_task_index: Annotated[int, merge_task_index]
-    task_results: Annotated[Dict[str, Any], merge_task_results]
-    processed_tasks: Annotated[set, merge_processed_tasks]
-    tool_invocations: Annotated[int, merge_tool_invocations]
-    original_messages: Annotated[List[AnyMessage], merge_original_messages]
+    tasks: Annotated[List[AnalyzeMessageTask], merge_tasks]  # 待处理任务列表
+    current_task_index: Annotated[int, merge_task_index]  # 当前处理任务索引
+    task_results: Annotated[Dict[str, Any], merge_task_results]  # 任务处理结果字典
+    processed_tasks: Annotated[set, merge_processed_tasks]  # 已处理任务集合
+    tool_invocations: Annotated[int, merge_tool_invocations]  # 工具调用次数
+    original_messages: Annotated[List[AnyMessage], merge_original_messages]  # 原始消息历史
 
 
 class TaskAnalyzerAgent:
-    """
-    任务分析代理类，负责分析用户输入的任务并提供相应的响应
-    """
-    def __init__(self, llm: BaseChatModel = None):
-        """
-        初始化任务分析代理
-        
-        参数:
-            llm: 大语言模型实例，如果为None则使用默认的deepseek模型
-        """
-        # 如果没有提供LLM，则默认使用deepseek
-        self.llm = llm if llm is not None else init_deepseek()
+    """任务分析代理类,负责分析用户输入的任务并提供相应的响应"""
 
-        # 定义并绑定工具
+    def __init__(self, llm: BaseChatModel = None):
+        """初始化任务分析代理"""
+        self.llm = llm or init_deepseek()
         self.tools = [get_current_weather, get_current_time]
         self.llm_with_tools = self.llm.bind_tools(self.tools)
-        
-        # 初始化工具节点
         self.tool_node = ToolNode(self.tools)
-        
-        # 构建工作流图
         self.graph = self.build_graph()
-        
         logging.info("任务分析代理初始化完成")
 
     async def agent_decision(self, state: TaskAnalyzerState) -> Dict[str, Any]:
-        """
-        代理决策函数，处理当前状态并返回下一步操作
-        
-        参数:
-            state: 当前任务分析器状态
-            
-        返回:
-            包含下一步操作的字典
-        """
+        """代理决策函数,处理当前状态并返回下一步操作"""
         try:
             messages = state.get("messages", [])
             if not messages:
                 logging.warning("没有消息可处理")
                 return {}
-                
-            # 处理消息逻辑
-            logging.info(f"处理消息: {messages[-1].content if messages else 'None'}")
             
-            # 检查是否需要工具调用
             last_message = messages[-1]
-            if isinstance(last_message, HumanMessage):
-                # 分析是否需要工具调用
-                tool_analysis_prompt = PromptTemplate.from_template(
-                    """分析用户输入是否需要使用工具:
-                    - 天气查询使用 get_current_weather
-                    - 时间查询使用 get_current_time
-                    
-                    用户输入: {input}
-                    
-                    只返回工具名称,如果不需要工具返回 "none"
-                    """
-                )
-                tool_result = await (tool_analysis_prompt | self.llm).ainvoke({"input": last_message.content})
-                tool_name = tool_result.content.strip().lower()
+            logging.info(f"处理消息: {last_message.content if last_message else 'None'}")
+          
+            if not isinstance(last_message, HumanMessage):
+                return {
+                    "tool_name": None,
+                    "tool_input": last_message.content,
+                    "result": None
+                }
+            
+            tool_analysis_prompt = PromptTemplate.from_template(
+                """分析用户输入是否需要使用工具:
+                - 天气查询使用 get_current_weather
+                - 时间查询使用 get_current_time
                 
-                if tool_name in ["get_current_weather", "get_current_time"]:
-                    # 需要工具调用,返回工具调用信息
-                    return {
-                        "tool_name": tool_name,
-                        "tool_input": last_message.content
-                    }
-                else:
-                    return {"tool_name": None, "tool_input": last_message.content}  
-            else:
-                return {"tool_name": None, "tool_input": last_message.content}
+                用户输入: {input}
+                
+                只返回工具名称,如果不需要工具返回 "none"
+                """
+            )
+            
+            tool_result = await (tool_analysis_prompt | self.llm).ainvoke({
+                "input": last_message.content
+            })
+            tool_name = tool_result.content.strip().lower()
+            
+            if tool_name not in ["get_current_weather", "get_current_time"]:
+                model_response = await self.llm.ainvoke([last_message])
+                return {
+                    "tool_name": None,
+                    "tool_input": last_message.content,
+                    "result": model_response.content
+                }
+            
+            return {
+                "tool_name": tool_name,
+                "tool_input": last_message.content,
+                "result": None
+            }
+            
         except Exception as e:
             logging.error(f"代理决策过程出错: {e}", exc_info=True)
             return {}
 
     async def analyze_message(self, state: TaskAnalyzerState) -> TaskAnalyzerState:
-        """分析用户消息中的多个任务，并结构化提取出这些任务"""
-        # 如果已经有任务在处理，直接返回
+        """分析用户消息中的多个任务,并结构化提取出这些任务"""
         current_index = state.get("current_task_index", 0)
         current_tasks = state.get("tasks", [])
         processed_tasks = state.get("processed_tasks", set())
         
+        print(f"current_tasks: {current_tasks}")
+        print(f"current_index: {current_index}")
+        print(f"processed_tasks: {processed_tasks}")
         if current_tasks and current_index < len(current_tasks):
             logging.info(f"当前还有任务在处理: 进度 {current_index + 1}/{len(current_tasks)}")
             return state
@@ -179,7 +169,6 @@ class TaskAnalyzerAgent:
 
         try:
             logging.info(f"开始分析新消息: {last_message.content}")
-            # 调用模型分析任务
             task_analysis_prompt = PromptTemplate.from_template(
                 """请分析用户的输入，识别出其中包含的所有独立任务。
                 
@@ -204,7 +193,6 @@ class TaskAnalyzerAgent:
             
             result = await (task_analysis_prompt | self.llm).ainvoke({"user_content": last_message.content})
             
-            # 清理和解析JSON
             json_str = result.content.strip()
             start, end = json_str.find('['), json_str.rfind(']') + 1
             if start != -1 and end > 0:
@@ -212,8 +200,6 @@ class TaskAnalyzerAgent:
                 
             data = json.loads(json_str)
             new_tasks = [AnalyzeMessageTask.from_json(task_data) for task_data in data]
-            
-            # 过滤掉已处理的任务
             new_tasks = [task for task in new_tasks if task.id not in processed_tasks]
             
             if not new_tasks:
@@ -224,13 +210,12 @@ class TaskAnalyzerAgent:
             for task in new_tasks:
                 logging.info(f"- {task}")
             
-            # 重置任务相关状态
             return {
                 **state,
                 "tasks": new_tasks,
                 "current_task_index": 0,
-                "task_results": {},  # 使用字典存储结果
-                "processed_tasks": processed_tasks  # 保持已处理任务的记录
+                "task_results": {},
+                "processed_tasks": processed_tasks
             }
 
         except json.JSONDecodeError as e:
@@ -251,7 +236,6 @@ class TaskAnalyzerAgent:
 
         current_task = tasks[current_index]
         
-        # 如果任务已处理，跳过
         if current_task.id in processed_tasks:
             return {
                 **state,
@@ -260,7 +244,6 @@ class TaskAnalyzerAgent:
         
         logging.info(f"处理任务 {current_index + 1}/{len(tasks)}: {current_task}")
 
-        # 处理工具调用
         tool_func = {
             "get_current_weather": get_current_weather,
             "get_current_time": get_current_time
@@ -283,7 +266,6 @@ class TaskAnalyzerAgent:
                 "messages": [*state.get("messages", []), HumanMessage(content=tool_instruction)]
             }
         else:
-            # 如果不需要工具调用,直接返回结果
             current_task.result = current_task.content
             return {
                 **state,
@@ -308,34 +290,19 @@ class TaskAnalyzerAgent:
         processed_tasks = state.get("processed_tasks", set())
         tool_invocations = state.get("tool_invocations", 0)
 
-        print("task_results",task_results)
-
         if not tasks or current_index >= len(tasks):
             return state
 
         current_task = tasks[current_index]
         
-        # 分别收集模型回答和工具调用结果
-        ai_responses = []
-        tool_responses = []
-        
-        for msg in messages[-3:]:
-            if isinstance(msg, AIMessage) and not getattr(msg, "tool_calls", None):
-                ai_responses.append(msg.content)
-            elif isinstance(msg, ToolMessage):
-                tool_responses.append(f"工具【{getattr(msg, 'name', '未知工具')}】执行结果: {msg.content}")
+        ai_responses = [msg.content for msg in messages[-3:] if isinstance(msg, AIMessage) and not getattr(msg, "tool_calls", None)]
+        tool_responses = [f"工具【{getattr(msg, 'name', '未知工具')}】执行结果: {msg.content}" for msg in messages[-3:] if isinstance(msg, ToolMessage)]
 
-        # 根据任务类型选择结果
-        if current_task.requires_tool:
-            result = "\n".join(tool_responses) if tool_responses else "工具调用无结果"
-        else:
-            result = "\n".join(ai_responses) if ai_responses else "模型回答无结果"
+        result = "\n".join(tool_responses) if current_task.requires_tool and tool_responses else "\n".join(ai_responses) if ai_responses else "无结果"
 
-        # 更新任务结果
         if not current_task.result:
             current_task.result = result
         
-        # 更新处理状态
         current_task.processed = True
         processed_tasks.add(current_task.id)
         task_results[current_task.id] = {
@@ -383,12 +350,9 @@ class TaskAnalyzerAgent:
         original_messages = state.get("original_messages", [])
         messages = state.get("messages", [])
 
-        print("task_results", task_results)
-
         if not task_results:
             return state
 
-        # 分别收集工具结果和模型回答
         tool_results = []
         model_results = []
         
@@ -400,7 +364,6 @@ class TaskAnalyzerAgent:
                     model_results.append(result['task'].result)
 
         try:
-            # 分别生成工具结果和模型回答的总结
             final_responses = []
             
             if tool_results:
@@ -423,7 +386,6 @@ class TaskAnalyzerAgent:
                 model_summary = await (model_prompt | self.llm).ainvoke({"content": "\n\n".join(model_results)})
                 final_responses.append(model_summary.content)
             
-            # 组合最终回复
             final_message = AIMessage(content="\n\n".join(final_responses))
             
             return {
@@ -450,25 +412,17 @@ class TaskAnalyzerAgent:
         return new_state
 
     def build_graph(self) -> StateGraph:
-        """
-        构建工作流图
-        
-        返回:
-            配置好的状态图实例
-        """
-        # 构建工作流图
+        """构建工作流图"""
         graph_builder = StateGraph(TaskAnalyzerState)
         
-        # 添加节点
-        graph_builder.add_node("agent", self.agent_decision)  # 代理决策节点，处理当前状态并返回下一步操作
-        graph_builder.add_node("analyze_message", self.analyze_message)  # 消息分析节点，分析用户消息中的多个任务
-        graph_builder.add_node("process_task", self.process_task)  # 任务处理节点，处理当前任务并更新状态
-        graph_builder.add_node("tools", self.tool_node)  # 工具节点，执行工具调用操作
-        graph_builder.add_node("save_task_result", self.save_task_result)  # 保存任务结果节点，存储任务执行结果
-        graph_builder.add_node("assemble_response", self.assemble_response)  # 组装响应节点，汇总所有任务结果生成最终回复
-        graph_builder.add_node("save_original_messages", self.save_original_messages)  # 保存原始消息节点，备份初始消息历史
+        graph_builder.add_node("agent", self.agent_decision)
+        graph_builder.add_node("analyze_message", self.analyze_message)
+        graph_builder.add_node("process_task", self.process_task)
+        graph_builder.add_node("tools", self.tool_node)
+        graph_builder.add_node("save_task_result", self.save_task_result)
+        graph_builder.add_node("assemble_response", self.assemble_response)
+        graph_builder.add_node("save_original_messages", self.save_original_messages)
         
-        # 设置图的边和流程
         graph_builder.set_entry_point("save_original_messages")
         graph_builder.add_edge("save_original_messages", "analyze_message")
         graph_builder.add_edge("analyze_message", "process_task")
@@ -483,19 +437,10 @@ class TaskAnalyzerAgent:
         )
         
         graph_builder.add_edge("assemble_response", END)
-        # 编译工作流图
         return graph_builder.compile()
 
     async def run(self, content: str) -> Dict[str, Any]:
-        """
-        运行任务分析
-        
-        参数:
-            task: 用户输入的任务文本
-            
-        返回:
-            任务分析结果
-        """
+        """运行任务分析"""
         initial_state = {
             "messages": [HumanMessage(content=content)],
             "chat_analyzer_messages": [],
@@ -508,7 +453,6 @@ class TaskAnalyzerAgent:
         }
         
         try:
-            # 执行工作流
             result = await self.graph.ainvoke(initial_state)
             logging.info("任务分析完成")
             return result

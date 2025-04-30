@@ -24,6 +24,7 @@ Requires-Dist: pytest-asyncio
 Requires-Dist: pytest-tornasync
 Requires-Dist: pytest-trio
 Requires-Dist: pytest-twisted
+Requires-Dist: twisted
 Dynamic: license-file
 
 # python-layout-demo
