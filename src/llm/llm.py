@@ -8,8 +8,10 @@ from typing import Optional, Dict, Any, Callable, Type
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
+from langchain_ollama import ChatOllama
 from langchain_core.language_models import BaseChatModel
 from dotenv import load_dotenv
+
 
 # 加载 .env 文件环境变量
 load_dotenv()
@@ -123,6 +125,13 @@ class LLMFactory:
                 "api_key": config.get("api_key", os.getenv("VOLCENGINE_API_KEY")),
                 "temperature": config.get("temperature", default_temperature),
             }
+        elif provider_lower == "ollama":
+            ModelClass = ChatOllama
+            provider_params = {
+                "model": model_name,
+                "base_url": config.get("base_url", os.getenv("OLLAMA_API_BASE")),
+                "api_key": config.get("api_key", os.getenv("OLLAMA_API_KEY")),
+            }
         else:
             supported = ["azure", "openai", "deepseek", "anthropic", "volcengine"] + list(cls._custom_providers.keys())
             raise ValueError(f"不支持的提供商: '{provider}'。支持的提供商有: {supported}")
@@ -186,3 +195,11 @@ def get_volcengine_chat_llm(model_name: Optional[str] = None, config: Optional[D
     """
     model_name = model_name or "deepseek-v3-250324"
     return LLMFactory.create_llm("volcengine", model_name, config, **kwargs)
+
+# 初始化 ollama
+def init_ollama(model_name: Optional[str] = None, config: Optional[Dict[str, Any]] = None, **kwargs) -> BaseChatModel:
+    """
+    初始化 ollama 实例
+    """
+    model_name = model_name or "llama3.1:8b"
+    return LLMFactory.create_llm("ollama", model_name, config, **kwargs)

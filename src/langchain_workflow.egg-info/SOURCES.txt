@@ -2,6 +2,7 @@ LICENSE
 README.md
 pyproject.toml
 src/agent/__init__.py
+src/agent/simple_angent.py
 src/agent/task_agent.py
 src/graph/__init__.py
 src/graph/generate_img.py
@@ -18,4 +19,5 @@ src/prompts/tool_analysis.py
 src/tools/tools.py
 tests/test_llm.py
 tests/test_sample.py
+tests/test_simple_angent.py
 tests/test_task_agent.py

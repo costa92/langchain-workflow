@@ -17,3 +17,4 @@ pytest-tornasync
 pytest-trio
 pytest-twisted
 twisted
+langchain_ollama

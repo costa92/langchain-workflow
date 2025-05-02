@@ -8,7 +8,7 @@ authors = [
 ]
 dependencies = [
   "langchain",
-  "langgraph", 
+  "langgraph",
   "fastapi",
   "pydantic",
   "uvicorn",
@@ -17,15 +17,16 @@ dependencies = [
   "langchain_deepseek",
   "IPython",
   "Pillow",
-  "python-dotenv",  # 修改为 python-dotenv 以支持环境变量加载
-  "pytest",  # 添加测试依赖
-  "pytest-env",  # 添加测试环境变量支持
+  "python-dotenv", # 修改为 python-dotenv 以支持环境变量加载
+  "pytest", # 添加测试依赖
+  "pytest-env", # 添加测试环境变量支持
   "anyio",
-  "pytest-asyncio",  # 支持异步测试
-  "pytest-tornasync",  # 支持Tornado异步测试
-  "pytest-trio",  # 支持Trio异步测试
-  "pytest-twisted",  # 支持Twisted异步测试
-  "twisted" # 
+  "pytest-asyncio", # 支持异步测试
+  "pytest-tornasync", # 支持Tornado异步测试
+  "pytest-trio", # 支持Trio异步测试
+  "pytest-twisted", # 支持Twisted异步测试
+  "twisted", # 
+  "langchain_ollama",
 ]
 description = "A demo project for Langchain"
 license = {file = "LICENSE"}
@@ -46,14 +47,13 @@ packages = {find = {where = ["src"]}}
 
 [tool.pytest.ini_options]
 # pytest 配置
-pythonpath = ["src"]
-filterwarnings = [
-    "ignore::DeprecationWarning"
-]
 addopts = "-ra -q"
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]
 minversion = "6.0"
+pythonpath = ["src"]
 testpaths = ["tests"]
-
 
 [tool.black]
 # black 代码格式化配置
@@ -66,7 +66,7 @@ src_paths = ["."]
 
 [tool.mypy]
 # mypy 类型检查配置
-python_version = "3.11"
 disallow_untyped_calls = true
 ignore_missing_imports = true
+python_version = "3.11"
 strict = true
