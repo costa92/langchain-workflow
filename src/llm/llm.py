@@ -133,7 +133,7 @@ class LLMFactory:
                 "api_key": config.get("api_key", os.getenv("OLLAMA_API_KEY")),
             }
         else:
-            supported = ["azure", "openai", "deepseek", "anthropic", "volcengine"] + list(cls._custom_providers.keys())
+            supported = ["azure", "openai", "deepseek", "anthropic", "volcengine", "ollama"] + list(cls._custom_providers.keys())
             raise ValueError(f"不支持的提供商: '{provider}'。支持的提供商有: {supported}")
 
         # 合并参数：从提供商特定参数开始，然后用 kwargs 覆盖
@@ -200,6 +200,13 @@ def get_volcengine_chat_llm(model_name: Optional[str] = None, config: Optional[D
 def init_ollama(model_name: Optional[str] = None, config: Optional[Dict[str, Any]] = None, **kwargs) -> BaseChatModel:
     """
     初始化 ollama 实例
+    
+    参数:
+        model_name: 模型名称，默认为 "llama3.1:8b"
+        config: 配置字典
+        kwargs: 额外参数
+        
     """
-    model_name = model_name or "llama3.1:8b"
+    model_name = model_name or "qwen2.5:7b"
     return LLMFactory.create_llm("ollama", model_name, config, **kwargs)
+
