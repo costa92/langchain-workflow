@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, Callable, Type
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
-from langchain_ollama.llms import OllamaLLM
+from langchain_ollama import ChatOllama
 from langchain_core.language_models import BaseChatModel
 from dotenv import load_dotenv
 
@@ -126,11 +126,11 @@ class LLMFactory:
                 "temperature": config.get("temperature", default_temperature),
             }
         elif provider_lower == "ollama":
-            ModelClass = OllamaLLM
+            ModelClass = ChatOllama
             provider_params = {
                 "model": model_name,
-                # "base_url": config.get("base_url", os.getenv("OLLAMA_API_BASE")),
-                # "api_key": config.get("api_key", os.getenv("OLLAMA_API_KEY")),
+                "base_url": config.get("base_url", os.getenv("OLLAMA_API_BASE")),
+                "api_key": config.get("api_key", os.getenv("OLLAMA_API_KEY")),
             }
         else:
             supported = ["azure", "openai", "deepseek", "anthropic", "volcengine", "ollama"] + list(cls._custom_providers.keys())
