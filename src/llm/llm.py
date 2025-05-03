@@ -207,6 +207,6 @@ def init_ollama(model_name: Optional[str] = None, config: Optional[Dict[str, Any
         kwargs: 额外参数
         
     """
-    model_name = model_name or "llama3"
+    model_name = model_name or "qwen2.5:7b"
     return LLMFactory.create_llm("ollama", model_name, config, **kwargs)
 
