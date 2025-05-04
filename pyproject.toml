@@ -27,6 +27,9 @@ dependencies = [
   "pytest-twisted", # 支持Twisted异步测试
   "twisted", # 
   "langchain_ollama",
+  "gTTS",
+  "pyttsx3",
+  "edge-tts",
 ]
 description = "A demo project for Langchain"
 license = {file = "LICENSE"}
