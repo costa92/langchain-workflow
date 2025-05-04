@@ -49,6 +49,7 @@ systemPrompt = """## 角色
 - 工具返回结果后，将该结果格式化到最终的 JSON 响应中。
 - 确保 `analysis_message` 字段只包含计算的最终答案或结果。
 - 确保 `user_input` 字段包含用户未经修改的原始输入。
+
 """
 
 class SimpleAgent:

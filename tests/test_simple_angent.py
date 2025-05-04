@@ -10,7 +10,7 @@ async def test_simple_agent():
     agent = SimpleAgent(llm)
     # 用户输入的内容
     user_input = """
-计算10 * 10
+上海在哪里？
     """
     result_stream = await agent.run(user_input)
     async for event in result_stream:
