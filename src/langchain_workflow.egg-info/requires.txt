@@ -18,3 +18,7 @@ pytest-trio
 pytest-twisted
 twisted
 langchain_ollama
+gTTS
+pyttsx3
+edge-tts
+ChatTTS

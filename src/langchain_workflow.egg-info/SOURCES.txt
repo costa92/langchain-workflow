@@ -4,6 +4,8 @@ pyproject.toml
 src/agent/__init__.py
 src/agent/simple_angent.py
 src/agent/task_agent.py
+src/agent/text_speech_agent.py
+src/agent/translation_angent.py
 src/graph/__init__.py
 src/graph/generate_img.py
 src/langchain_workflow.egg-info/PKG-INFO
@@ -17,7 +19,13 @@ src/prompts/response_generation.py
 src/prompts/task_analysis.py
 src/prompts/tool_analysis.py
 src/tools/tools.py
+tests/test_chattts.py
+tests/test_edge_tts.py
+tests/test_gtts.py
 tests/test_llm.py
+tests/test_ollama.py
+tests/test_pyttsx3.py
 tests/test_sample.py
 tests/test_simple_angent.py
 tests/test_task_agent.py
+tests/test_translation.py

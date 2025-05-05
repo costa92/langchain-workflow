@@ -6,6 +6,7 @@ from langgraph.graph.message import add_messages
 from typing import Annotated, List
 from llm.llm import init_ollama
 from typing_extensions import TypedDict
+from langchain_core.prompts import PromptTemplate
 
 system_prompt = """
 # 角色与目标

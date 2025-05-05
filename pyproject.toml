@@ -30,6 +30,7 @@ dependencies = [
   "gTTS",
   "pyttsx3",
   "edge-tts",
+  "ChatTTS",
 ]
 description = "A demo project for Langchain"
 license = {file = "LICENSE"}
