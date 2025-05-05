@@ -23,7 +23,7 @@ def test_pyttsx3():
   engine.setProperty('volume', 0.9)   # 设置音量
 
   # 要转换的文本
-  text = "·瑶，还看手机，还不洗澡"
+  text = "龙汐瑶，还看手机，还不洗澡睡觉"
 
   # 让引擎朗读文本
   engine.say(text)
