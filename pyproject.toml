@@ -31,6 +31,10 @@ dependencies = [
   "pyttsx3",
   "edge-tts",
   "ChatTTS",
+  "torchaudio",
+  "torch",
+  "numpy",
+  "soundfile",
 ]
 description = "A demo project for Langchain"
 license = {file = "LICENSE"}
