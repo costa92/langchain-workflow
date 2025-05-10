@@ -10,3 +10,5 @@ __pycache__
 src/langchain_demo.egg-info
 src/langchain_workflow.egg-info
 .htmlcov
+.asset/gpt
+.asset/tokenizer
