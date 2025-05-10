@@ -149,6 +149,13 @@ uvicorn src.api:app --reload
 ```
 
 ### 说明
+
 - `messages` 为历史消息列表，最后一条为用户输入。
 - `reply` 为本次 AI 回复内容。
 - 支持多轮对话。
+
+### 初始化 Git LFS（仅需执行一次）
+
+```sh
+git lfs install
+```
