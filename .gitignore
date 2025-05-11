@@ -12,3 +12,6 @@ src/langchain_workflow.egg-info
 .htmlcov
 asset/Embed.safetensors
 asset/gpt/model.safetensors
+asset/Vocos.safetensors
+asset/DVAE.safetensors
+asset/Decoder.safetensors

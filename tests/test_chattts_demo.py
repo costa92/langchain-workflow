@@ -7,7 +7,7 @@ import torchaudio
 chat = ChatTTS.Chat()
 chat.load(compile=False) # Set to True for better performance
 
-texts = ["用中英文混杂的方式，简单介绍宁波"]
+texts = ["chat T T S 是一款强大的对话式文本转语音模型。它有中英混读和多说话人的能力。"]
 
 wavs = chat.infer(texts)
 

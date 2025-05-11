@@ -1,3 +1,0 @@
-git add .gitattributes
-git add asset/Embed.safetensors
-git add asset/gpt/model.safetensors
